@@ -13852,6 +13852,15 @@
     "clear" : {
       "comment" : "Tab color for Classic and Omnipod 5 Pods"
     },
+    "Clear Log" : {
+      "comment" : "Button title to confirm clearing the pod session log"
+    },
+    "Clear Pod Session Log" : {
+      "comment" : "Button title to clear the entire pod session log"
+    },
+    "Clear Pod Session Log?" : {
+      "comment" : "Title for clear pod session log action sheet"
+    },
     "Command error %1$@: %2$@" : {
       "comment" : "Format string for invalid message error code (1: error code number) (2: error description)",
       "extractionState" : "manual",
@@ -20165,6 +20174,9 @@
         }
       }
     },
+    "Each completed pod is recorded here with its fault code and ref string, if any, so you can report it to your supplier without needing a screenshot." : {
+      "comment" : "Footer explanation for the pod session log"
+    },
     "Empty reservoir" : {
       "comment" : "Description for Empty reservoir pod fault",
       "extractionState" : "manual",
@@ -25875,6 +25887,9 @@
           }
         }
       }
+    },
+    "Filled with %1$@ U" : {
+      "comment" : "Pod fill amount on the pair pod screen (1: units)"
     },
     "Finish deactivation" : {
       "comment" : "Settings page link description when next lifecycle action is to finish deactivation",
@@ -32571,6 +32586,9 @@
           }
         }
       }
+    },
+    "Log Settings" : {
+      "comment" : "Section header for pod session log settings"
     },
     "Lot" : {
       "comment" : "description label for lot pod details row",
@@ -49595,6 +49613,9 @@
           }
         }
       }
+    },
+    "Pod Fill Amount" : {
+      "comment" : "Text for default pod fill amount stepper"
     },
     "Pod Hours" : {
       "comment" : "description label for pod hours pod details row",
@@ -70249,6 +70270,9 @@
           }
         }
       }
+    },
+    "This will permanently delete all recorded pod sessions. This cannot be undone." : {
+      "comment" : "Message for clear pod session log action sheet"
     },
     "threeNotUsed" : {
       "comment" : "Pod state threeNotUsed",

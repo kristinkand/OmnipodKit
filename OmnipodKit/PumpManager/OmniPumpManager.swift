@@ -1245,6 +1245,35 @@ extension OmniPumpManager {
     }
 
     /// Reports the end of a pod's life as a pump event and an analytics event.
+    // MARK: - Ending the pod on a controller without the deactivate screen
+
+    /// Deactivates the pod and forgets it, as the deactivate screen does, for a controller without that screen:
+    /// an alarming pod on the untethered watch stops delivering and goes quiet. Called on the main thread.
+    public func deactivateAndForgetPod(completion: @escaping (Error?) -> Void) {
+        deactivatePod { error in
+            DispatchQueue.main.async {
+                if let error {
+                    completion(error)
+                    return
+                }
+                self.forgetPod { DispatchQueue.main.async { completion(nil) } }
+            }
+        }
+    }
+
+    /// Forgets a pod that doesn't answer, as the deactivate screen's discard does.
+    public func discardPod(completion: @escaping () -> Void) {
+        forgetPod(completion: completion)
+    }
+
+    /// Forgets a pod another controller ended. That controller booked its doses; this one's view of them is from
+    /// before it let go, so none of it is stored.
+    public func forgetPodEndedElsewhere() {
+        podComms.forgetPod()
+        resetPerPodPumpManagerState()
+        prepForNewPod()
+    }
+
     private func reportPodEnded(_ podState: PodState) {
         let lifetime: TimeInterval
         if let faultTime = podState.fault?.faultEventTimeSinceActivation {

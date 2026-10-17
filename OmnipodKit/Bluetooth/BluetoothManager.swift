@@ -210,14 +210,16 @@ class BluetoothManager: NSObject {
         disconnectFromDevice(uuidString: uuidString)
     }
 
-    /// True from a release until the pod is taken back: no command dials the pod meanwhile, including
-    /// a session queued before the release (an unacknowledged command's status read dialed a lent pod
-    /// during the other controller's takeover). managerQueue-isolated.
+    /// True from a release until the pod is taken back (`connectToDevice`, or a takeover scan, which
+    /// adopts without it): no command dials the pod meanwhile, including a session queued before the
+    /// release (an unacknowledged command's status read dialed a lent pod during the other controller's
+    /// takeover). managerQueue-isolated.
     private var loanReleased = false
 
     /// Scan for the pod with this address and adopt the peripheral this device discovers.
     func beginLoanTakeover(podId: UInt32) {
         managerQueue.async {
+            self.loanReleased = false
             self.loanScanMarkerReason = "beginLoanTakeover"
             self.loanTakeoverPodId = podId
             if self.manager.state == .poweredOn {
@@ -778,6 +780,7 @@ class BluetoothManager: NSObject {
     func escalateLoanReclaim(podId: UInt32) {
         managerQueue.async {
             self.log.default("take escalation — arming scan-adopt for pod 0x%x (central preserved)", podId)
+            self.loanReleased = false
             self.loanScanMarkerReason = "escalate"
             self.loanTakeoverPodId = podId
             if self.manager.state == .poweredOn, !self.manager.isScanning {

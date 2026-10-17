@@ -166,7 +166,6 @@
 		FADE00000000000000000108 /* Exceptions for "OmnipodKit" folder in "OmnipodKit-watchOS" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
-				PumpManagerUI/Views/PodSessionLogView.swift,
 				Common/FrameworkLocalText.swift,
 				Common/Image.swift,
 				Common/NibLoadable.swift,

@@ -111,6 +111,9 @@ public class OmniPumpManager: RileyLinkPumpManager {
             podComms = erosPodComms
         case dashType, omnipod5Type:
             let blePodComms = BlePodComms.init(podState: state.podState, podType: podType, myId: state.controllerId, podId: state.podId)
+            // Before the first foreground event can pre-connect: a pod handed over by another
+            // controller is never held between commands, so that controller can take it back.
+            blePodComms.setHoldsConnectionBetweenCommands(!state.configuredByAnotherController)
             podComms = blePodComms
         default:
             podComms = PodComms(podState: state.podState, podType: podType)

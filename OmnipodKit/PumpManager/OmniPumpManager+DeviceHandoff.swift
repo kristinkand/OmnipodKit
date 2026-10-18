@@ -66,6 +66,7 @@ extension OmniPumpManagerState {
     func sharedConfiguration(managerIdentifier: String) -> SharedDeviceConfiguration {
         var shared = self
         shared.podConnectionReleased = false
+        shared.refusesForeignSessionsSince = nil
         shared.configuredByAnotherController = false
         shared.inFlightDosesInheritedAway = false
         shared.rileyLinkConnectionManagerState = nil
@@ -86,6 +87,7 @@ extension OmniPumpManagerState {
         pod?.untrackedDeliveryIsForeign = true
         state.updatePodStateFromPodComms(pod)
         state.podConnectionReleased = false
+        state.refusesForeignSessionsSince = nil
         state.configuredByAnotherController = true
         state.inFlightDosesInheritedAway = false
         state.rileyLinkConnectionManagerState = nil
@@ -94,6 +96,9 @@ extension OmniPumpManagerState {
 
     /// Copies of a bolus or temp basal still in flight now belong to the controller taking over.
     mutating func releaseControl() {
+        if !podConnectionReleased {
+            refusesForeignSessionsSince = Date()
+        }
         podConnectionReleased = true
         inFlightDosesInheritedAway = podState?.unfinalizedBolus != nil || podState?.unfinalizedTempBasal != nil
     }
@@ -149,6 +154,7 @@ extension OmniPumpManager: ExclusiveDeviceControl {
     /// Copies of a bolus or temp basal still in flight now belong to the controller taking over.
     public func releaseControl() {
         setState { $0.releaseControl() }
+        (podComms as? BlePodComms)?.refusesForeignSessionsSince = state.refusesForeignSessionsSince
         (podComms as? BlePodComms)?.releaseConnection()
 
         // A saved handle that never connected is wrong: drop it from the pod state, so
@@ -176,8 +182,10 @@ extension OmniPumpManager: ExclusiveDeviceControl {
         (podComms as? BlePodComms)?.resolveAfterForeignControl(dropInFlight: state.inFlightDosesInheritedAway)
         setState { state in
             state.podConnectionReleased = false
+            state.refusesForeignSessionsSince = nil
             state.inFlightDosesInheritedAway = false
         }
+        (podComms as? BlePodComms)?.refusesForeignSessionsSince = nil
     }
 
     public var isControlReady: Bool {
@@ -208,6 +216,15 @@ extension OmniPumpManager: ExclusiveDeviceControl {
     /// The last EAP SQN resync: another controller established sessions since our last contact.
     public var lastForeignSessionAt: Date? {
         (podComms as? BlePodComms)?.lastSqnResync?.at
+    }
+
+    /// While set, every session that finds another controller's session after this date is refused.
+    public var refusesForeignSessionsSince: Date? {
+        get { state.refusesForeignSessionsSince }
+        set {
+            setState { $0.refusesForeignSessionsSince = newValue }
+            (podComms as? BlePodComms)?.refusesForeignSessionsSince = newValue
+        }
     }
 
     public var takeControlNeedsSearch: Bool {

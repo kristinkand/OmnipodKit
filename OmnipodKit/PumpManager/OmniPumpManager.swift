@@ -126,6 +126,8 @@ public class OmniPumpManager: RileyLinkPumpManager {
 
         finishInit(podType: state.podType)
 
+        (podComms as? BlePodComms)?.refusesForeignSessionsSince = state.refusesForeignSessionsSince
+
         // Honor a persisted release (ExclusiveDeviceControl): BlePodComms connects at construction,
         // and a relaunch must not take the pod back from the controller holding it.
         if state.podConnectionReleased {

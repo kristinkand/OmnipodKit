@@ -26,6 +26,10 @@ public struct OmniPumpManagerState: RawRepresentable, Equatable {
     /// so a relaunch does not take it back.
     var podConnectionReleased: Bool = false
 
+    /// Resyncs after this release indicate that another controller used the pod. Persisted so a
+    /// relaunch still refuses a command until this manager explicitly takes control back.
+    var refusesForeignSessionsSince: Date?
+
     /// Built from another controller's export (DeviceConfigurationSharing).
     var configuredByAnotherController: Bool = false
 
@@ -344,6 +348,8 @@ public struct OmniPumpManagerState: RawRepresentable, Equatable {
         self.podAttachmentConfirmed = rawValue["podAttachmentConfirmed"] as? Bool ?? false
 
         self.podConnectionReleased = rawValue["podConnectionReleased"] as? Bool ?? false
+        self.refusesForeignSessionsSince = rawValue["refusesForeignSessionsSince"] as? Date
+            ?? (self.podConnectionReleased ? .distantPast : nil)
         self.configuredByAnotherController = rawValue["configuredByAnotherController"] as? Bool ?? false
         self.inFlightDosesInheritedAway = rawValue["inFlightDosesInheritedAway"] as? Bool ?? false
 
@@ -410,6 +416,8 @@ public struct OmniPumpManagerState: RawRepresentable, Equatable {
             "controllerId": controllerId,
             "podId": podId,
         ]
+
+        value["refusesForeignSessionsSince"] = refusesForeignSessionsSince
 
         value["podType"] = podType.rawValue
         value["podKeepAlive"] = podKeepAlive.rawValue

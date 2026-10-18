@@ -60,6 +60,9 @@ class BlePodComms: PodComms {
     /// The most recent EAP SQN resync: the pod's session counter found ahead of ours, so another
     /// controller established sessions since our last contact. nil until the first this process.
     private(set) var lastSqnResync: (at: Date, ours: Int, pods: Int)?
+    /// A session that finds another controller's use after this date is refused, so this one never
+    /// commands a pod the other may be dosing with. Stored per communications instance.
+    var refusesForeignSessionsSince: Date?
 
     /// Go looking for the pod by address instead of waiting to hear it (a stalled take).
     func escalateTakeover(podId: UInt32) {
@@ -797,6 +800,13 @@ class BlePodComms: PodComms {
             guard !(self.hasLTK && self.needsSessionEstablishment) else {
                 self.log.error("Session '%{public}@' refused: no session established on this connection", name)
                 block(.failure(PodCommsError.podNotConnected))
+                return
+            }
+
+            // checked once the handshake ran, which is where another controller's sessions show
+            if let since = self.refusesForeignSessionsSince, let resync = self.lastSqnResync, resync.at > since {
+                self.omnipodLogDeviceEvent("[trust] session '\(name)' refused: another controller used the pod since \(since)")
+                block(.failure(PodCommsError.diagnosticMessage(str: "Another controller has used this pod")))
                 return
             }
 

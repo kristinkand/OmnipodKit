@@ -269,6 +269,12 @@ extension OmniPumpManager: PumpDeliveryOdometer {
 
     public var deliveryPulseUnits: Double { Pod.pulseSize }
 
+    public var bolusDeliveryRate: Double { Pod.bolusDeliveryRate }
+
+    public var supportedTempBasalDurations: [TimeInterval] { Pod.supportedTempBasalDurations }
+
+    public var untrackedBolusRemaining: Double { state.podState?.untrackedBolusRemaining ?? 0 }
+
     /// A real status read, bypassing the freshness shortcut in ensureCurrentPumpData.
     public func refreshDeliveredUnits(completion: @escaping (Bool) -> Void) {
         #if targetEnvironment(simulator)

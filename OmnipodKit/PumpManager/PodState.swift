@@ -138,6 +138,8 @@ public struct PodState: RawRepresentable, Equatable, CustomDebugStringConvertibl
     /// Untracked delivery may be another controller's, so none is booked. Set on adopt, take-back or
     /// a foreign session; cleared once the pod shows no bolus running.
     var untrackedDeliveryIsForeign: Bool = false
+    /// From the last status: the undelivered part of a bolus running that no unfinalized dose tracks. Not persisted.
+    var untrackedBolusRemaining: Double = 0
 
 
     init(
@@ -411,6 +413,7 @@ public struct PodState: RawRepresentable, Equatable, CustomDebugStringConvertibl
                 unfinalizedBolus = UnfinalizedDose(bolusAmount: bolusNotDelivered, startTime: date, scheduledCertainty: .certain, insulinType: insulinType, automatic: false)
             }
         }
+        untrackedBolusRemaining = deliveryStatus.bolusing && unfinalizedBolus == nil ? bolusNotDelivered : 0
         if deliveryStatus.tempBasalRunning && unfinalizedTempBasal == nil { // active temp basal that we aren't tracking
             // unfinalizedTempBasal = UnfinalizedDose(tempBasalRate: 0, startTime: date, duration: .minutes(30), isHighTemp: false, scheduledCertainty: .certain, insulinType: insulinType)
         }

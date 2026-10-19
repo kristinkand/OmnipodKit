@@ -86,7 +86,7 @@ class SessionEstablisher {
         let challenge = try eapAkaChallenge()
         let sendResult = manager.sendMessagePacket(challenge)
         guard case .sentWithAcknowledgment = sendResult else {
-            throw SessionEstablishmentException.CommunicationError("Could not send the EAP AKA challenge: $sendResult")
+            throw SessionEstablishmentException.CommunicationError("Could not send the EAP AKA challenge: \(sendResult)")
         }
         guard let challengeResponse = try manager.readMessagePacket() else {
             throw SessionEstablishmentException.CommunicationError("Could not establish session")

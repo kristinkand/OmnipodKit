@@ -172,6 +172,11 @@ class BluetoothManager: NSObject {
     /// Why the marker last moved. Set immediately before each write; the didSet reports it.
     private var loanScanMarkerReason = "init"
 
+    /// The armed takeover scan is an escalation's, for a pod this device already holds a handle for;
+    /// only that one is ended with its take. A takeover's search, for a pod with no handle here, is
+    /// the only way to reach that pod and stays armed. managerQueue-isolated.
+    private var takeoverScanIsEscalation = false
+
     /// A pod whose advertisement matched the loan marker and which we are now connecting to.
     /// The marker stays armed until this peripheral actually connects — see the adopt block.
     private var pendingAdoptedLoanPod: String?
@@ -220,22 +225,30 @@ class BluetoothManager: NSObject {
     func beginLoanTakeover(podId: UInt32) {
         managerQueue.async {
             self.loanReleased = false
-            self.loanScanMarkerReason = "beginLoanTakeover"
-            self.loanTakeoverPodId = podId
-            if self.manager.state == .poweredOn {
-                self.log.default("begin takeover scan for pod 0x%x", podId)
-                // The running idle scan filters on the fault UUID, which a healthy pod never
-                // advertises; scanForPeripherals does not merge filters, so stop it and re-arm.
-                if self.manager.isScanning {
-                    self.log.default("stopping the idle scan to re-arm with the takeover filter")
-                    self.manager.stopScan()
-                }
-                self.startScanning()
-            } else {
-                // centralManagerDidUpdateState starts the scan at poweredOn.
-                self.log.default("takeover armed for pod 0x%x; scan starts at poweredOn", podId)
-            }
+            self.log.default("begin takeover scan for pod 0x%x", podId)
+            self.takeoverScanIsEscalation = false
+            self.armTakeoverScan(podId: podId, reason: "beginLoanTakeover")
         }
+    }
+
+    /// The one way into a takeover scan, for a takeover and an escalation alike. The running idle scan
+    /// filters on the fault UUID, which a healthy pod never advertises, and scanForPeripherals does not
+    /// merge filters: stop it and re-arm. An escalation that left the idle scan running would have every
+    /// connect wait on a scan that cannot see the pod.
+    private func armTakeoverScan(podId: UInt32, reason: String) {
+        dispatchPrecondition(condition: .onQueue(managerQueue))
+        loanScanMarkerReason = reason
+        loanTakeoverPodId = podId
+        guard manager.state == .poweredOn else {
+            // centralManagerDidUpdateState starts the scan at poweredOn.
+            log.default("takeover armed for pod 0x%x; scan starts at poweredOn", podId)
+            return
+        }
+        if manager.isScanning {
+            log.default("stopping the running scan to re-arm with the takeover filter")
+            manager.stopScan()
+        }
+        startScanning()
     }
 
     /// The O5 changes its service advertisement uuid from using FFFFFFFE the pdmId after pairing.
@@ -781,11 +794,23 @@ class BluetoothManager: NSObject {
         managerQueue.async {
             self.log.default("take escalation — arming scan-adopt for pod 0x%x (central preserved)", podId)
             self.loanReleased = false
-            self.loanScanMarkerReason = "escalate"
-            self.loanTakeoverPodId = podId
-            if self.manager.state == .poweredOn, !self.manager.isScanning {
-                self.startScanning()
-            }
+            self.takeoverScanIsEscalation = true
+            self.armTakeoverScan(podId: podId, reason: "escalate")
+        }
+    }
+
+    /// The take an escalation served is over, reached or given up: disarm its scan-adopt so connects go
+    /// by this device's handle again, and put the idle scan back. Armed past its take, every connect
+    /// would wait on the scan. A connect the adopt already started is left to finish.
+    func endLoanReclaimEscalation() {
+        managerQueue.async {
+            guard self.loanTakeoverPodId != nil, self.takeoverScanIsEscalation else { return }
+            self.takeoverScanIsEscalation = false
+            self.loanScanMarkerReason = "escalation ended"
+            self.loanTakeoverPodId = nil
+            guard self.manager.state == .poweredOn, !self.discoveryModeEnabled else { return }
+            if self.manager.isScanning { self.manager.stopScan() }
+            self.resumeScanIfNeeded()
         }
     }
 

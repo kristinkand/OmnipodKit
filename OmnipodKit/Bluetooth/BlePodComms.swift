@@ -69,6 +69,11 @@ class BlePodComms: PodComms {
         bluetoothManager.escalateLoanReclaim(podId: podId)
     }
 
+    /// The stalled take is over: end its scan-adopt.
+    func endEscalation() {
+        bluetoothManager.endLoanReclaimEscalation()
+    }
+
     /// The takeover search adopted the pod as this device's own peripheral: record it as the pod's
     /// handle. The manager's `localState` carries it to the next adopt of this pod.
     func omnipodDidAdoptLoanPod(uuidString: String) {

@@ -208,6 +208,11 @@ extension OmniPumpManager: ExclusiveDeviceControl {
         return String(format: "scan-adopt armed for pod 0x%X", address)
     }
 
+    /// Ends the scan-adopt `escalateTakeControl()` armed: commands connect by this device's handle again.
+    public func endTakeEscalation() {
+        (podComms as? BlePodComms)?.endEscalation()
+    }
+
     public func connectionDiagnostics() -> String? {
         guard let ble = (podComms as? BlePodComms)?.bluetoothManager else { return nil }
         return "\(ble.loanBleDiagnostics) pod=\(peripheralStateDescription) · \(ConnectClock.summary(since: ConnectClock.attemptStartedAt))"

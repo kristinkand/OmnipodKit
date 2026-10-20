@@ -643,7 +643,7 @@ class BluetoothManager: NSObject {
                 self.delayedProbeInFlight = false
                 if !self.shouldHoldConnection {
                     for device in self.devices where device.manager.peripheral.state != .disconnected {
-                        self.manager.cancelPeripheralConnection(device.manager.peripheral)
+                        self.cancelLink(device.manager.peripheral, site: "setHeartbeatRequest")
                     }
                 }
                 self.resumeScanIfNeeded()
@@ -873,7 +873,7 @@ class BluetoothManager: NSObject {
                    (peripheral.state == .connected && !autoConnectIDs.contains(peripheral.identifier.uuidString))
                 {
                     log.default("Disconnecting from peripheral: %{public}@", peripheral)
-                    manager.cancelPeripheralConnection(peripheral)
+                    cancelLink(peripheral, site: "endPodDiscovery")
                 }
             }
         }
@@ -926,7 +926,7 @@ class BluetoothManager: NSObject {
             if let idx = self.devices.firstIndex(where: { $0.manager.peripheral.identifier.uuidString == uuidString }) {
                 let peripheral = self.devices[idx].manager.peripheral
                 if peripheral.state == .connected || peripheral.state == .connecting {
-                    self.manager.cancelPeripheralConnection(peripheral)
+                    self.cancelLink(peripheral, site: "disconnectFromDevice")
                 }
                 self.devices.remove(at: idx)
                 self.log.default("Removed discarded pod %{public}@ from devices", uuidString)
@@ -954,12 +954,12 @@ class BluetoothManager: NSObject {
                 switch peripheral.state {
                 case .connected:
                     log.info("updateConnections: Disconnecting from peripheral: %{public}@", peripheral)
-                    manager.cancelPeripheralConnection(peripheral)
+                    cancelLink(peripheral, site: "updateConnections")
                 case .connecting, .disconnecting:
                     // Cancel a pending connect; leave a disconnecting one.
                     if peripheral.state == .connecting {
                         log.info("updateConnections: Disconnecting from peripheral: %{public}@", peripheral)
-                        manager.cancelPeripheralConnection(peripheral)
+                        cancelLink(peripheral, site: "updateConnections")
                     }
                 case .disconnected:
                     break
@@ -992,7 +992,7 @@ class BluetoothManager: NSObject {
             switch peripheral.state {
             case .connecting where !isConnectWatchdogActive(peripheral):
                 log.info("discoverPods: Cancelling stale connect: %{public}@", peripheral)
-                manager.cancelPeripheralConnection(peripheral)
+                cancelLink(peripheral, site: "discoverPods")
             case .disconnected, .disconnecting:
                 log.info("discoverPods: Connecting to peripheral: %{public}@", peripheral)
                 timedConnect(peripheral)
@@ -1099,7 +1099,7 @@ class BluetoothManager: NSObject {
             // Distinct telemetry: watchdog firing with state==connecting is pathognomonic for the wedge;
             // tagging the pod name ("InPlay BLE") lets prevalence be measured per pod lot / phone model.
             self.connectionDelegate?.omnipodLogDeviceEvent("[eager] watchdog fired state=\(target.state.rawValue) name=\(target.name ?? "?") — cancel+retry")
-            self.manager.cancelPeripheralConnection(target)
+            self.cancelLink(target, site: "armConnectWatchdog")
             guard Date().addingTimeInterval(BluetoothManager.eagerConnectTeardownSeconds) < deadline else {
                 self.log.default("[eager] connect watchdog budget exhausted for %{public}@ — giving up", id)
                 self.disarmConnectWatchdog(target)
@@ -1186,7 +1186,7 @@ class BluetoothManager: NSObject {
             connectionDelegate?.omnipodLogDeviceEvent("[connectOnDemand] command preempts heartbeat probe — cancelling probe")
             delayedProbeInFlight = false
             delayedProbeIssuedAt = nil
-            manager.cancelPeripheralConnection(peripheral)
+            cancelLink(peripheral, site: "beginCommandConnect")
         }
         commandConnectInFlight = true
         // Eager connect (InPlay / iPhone-16 mitigation): a known pod on an affected phone connects
@@ -1260,7 +1260,7 @@ class BluetoothManager: NSObject {
             } else if shouldUseEagerConnect(for: peripheral) {
                 log.default("[foreground] unsupervised connect in flight — cancelling and reconnecting eagerly")
                 connectionDelegate?.omnipodLogDeviceEvent("[foreground] cancelling stale in-flight connect, reconnecting eagerly")
-                manager.cancelPeripheralConnection(peripheral)
+                cancelLink(peripheral, site: "enterForeground")
                 managerQueue.asyncAfter(deadline: .now() + BluetoothManager.eagerConnectTeardownSeconds) { [weak self] in
                     guard let self = self, self.isAppForeground, peripheral.state != .connected else { return }
                     self.beginCommandConnect(peripheral)
@@ -1308,7 +1308,7 @@ class BluetoothManager: NSObject {
             log.default("[connectOnDemand] background — disconnecting, resuming heartbeat probe")
             connectionDelegate?.omnipodLogDeviceEvent("[connectOnDemand] background — disconnecting, resuming heartbeat probe")
             disarmConnectWatchdog(peripheral)                // or it would retry the connect we're cancelling
-            manager.cancelPeripheralConnection(peripheral)   // didDisconnect resumes scan + arms probe
+            cancelLink(peripheral, site: "enterBackground")   // didDisconnect resumes scan + arms probe
         } else {
             resumeScanIfNeeded()                             // fault-listener scan while idle
             issueDelayedConnectProbe(peripheral)             // + heartbeat probe alongside (if needed)
@@ -1320,6 +1320,16 @@ class BluetoothManager: NSObject {
     /// the heartbeat probe.
     /// `site` names why we are hanging up: "idle" (the idle-disconnect) or "connectError"
     /// (connectOnDemand's catch, unsticking a connect after its command threw).
+    /// Every cancel of a pod link goes through here, so the device log (the watch log when untethered) names who
+    /// ended it: a link our side cancels shows up only as `Pod disconnected … nil`, and on 19 and 20 October the
+    /// watch's links ended that way about a second after connecting, again and again, with nothing saying why.
+    func cancelLink(_ peripheral: CBPeripheral, site: String) {
+        let state = peripheral.state.rawValue
+        log.default("[link] cancel by %{public}@ (state %{public}d)", site, state)
+        connectionDelegate?.omnipodLogDeviceEvent("[link] cancel by \(site) (state \(state), foreground=\(isAppForeground))")
+        manager.cancelPeripheralConnection(peripheral)
+    }
+
     func disconnectOnDemand(_ peripheral: CBPeripheral, by site: String, detail: String? = nil) {
         managerQueue.async { [weak self] in
             guard let self = self else { return }
@@ -1333,7 +1343,7 @@ class BluetoothManager: NSObject {
             self.commandConnectInFlight = false
             self.log.default("[connectOnDemand] central.cancel on managerQueue for %{public}@ (site=%{public}@)", peripheral.identifier.uuidString, site)
             if let detail { self.connectionDelegate?.omnipodLogDeviceEvent("[connectOnDemand] teardown by \(site): \(detail)") }
-            self.manager.cancelPeripheralConnection(peripheral)
+            self.cancelLink(peripheral, site: "disconnectOnDemand(\(site))")
         }
     }
 
@@ -1800,7 +1810,7 @@ extension BluetoothManager: CBCentralManagerDelegate {
             // Loop's resulting status/dose commands run via connect-on-demand rather than fighting this
             // transient probe link.
             pendingHeartbeatFire = true
-            manager.cancelPeripheralConnection(peripheral)
+            cancelLink(peripheral, site: "didConnect heartbeat probe")
             return
         }
 

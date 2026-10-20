@@ -184,6 +184,8 @@ extension PeripheralManager {
             if let error = error as? PeripheralManagerError, error.isSymptomaticOfUnresponsivePod {
                 if disconnectOnUnresponsivePod, peripheral.state == .connected {
                     log.error("[readMessagePacket] Disconnecting due to unresponsive pod error while reading")
+                    bluetoothManager?.connectionDelegate?.omnipodLogDeviceEvent(
+                        "[link] cancel by readMessagePacket: unresponsive pod (\(error))")
                     central?.cancelPeripheralConnection(peripheral)
                 } else {
                     log.error("[readMessagePacket] Pod already not connected (state=%{public}@), skipping disconnect",

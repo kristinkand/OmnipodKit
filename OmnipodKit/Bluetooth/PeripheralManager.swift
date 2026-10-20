@@ -364,6 +364,7 @@ extension PeripheralManager {
     func reconnect(timeout: TimeInterval) throws {
         try runCommand(timeout: timeout) {
             addCondition(.connect)
+            bluetoothManager?.connectionDelegate?.omnipodLogDeviceEvent("[link] cancel by reconnect (forceful reconnect)")
             central?.cancelPeripheralConnection(peripheral)
         }
     }

@@ -89,6 +89,10 @@ public class OmniPumpManager: RileyLinkPumpManager {
         state.podState?.localizedFaultDescription
     }
 
+    public var inSignalLoss: Bool {
+        isSignalLost(at: Date(), lastPodUpdate: state.podState?.podTimeUpdated)
+    }
+
     // This string should match the PumpManagerIdentifier string.
     public static let pluginIdentifier: String = "Omni"
 
@@ -1010,7 +1014,6 @@ extension OmniPumpManager {
                 imageName: "exclamationmark.circle.fill",
                 state: .critical)
         case .active:
-            let timeSinceLastResponse = date.timeIntervalSince(state.podState?.podTimeUpdated ?? .distantPast)
             if let reservoirPercent = state.reservoirLevel?.percentage, reservoirPercent == 0 {
                 return PumpStatusHighlight(
                     localizedMessage: LocalizedString("No Insulin", comment: "Status highlight that a pump is out of insulin."),
@@ -1021,7 +1024,7 @@ extension OmniPumpManager {
                     localizedMessage: LocalizedString("Insulin Suspended", comment: "Status highlight that insulin delivery was suspended."),
                     imageName: "pause.circle.fill",
                     state: .warning)
-            } else if timeSinceLastResponse > .minutes(12) {
+            } else if isSignalLost(at: date, lastPodUpdate: state.podState?.podTimeUpdated) {
                 return PumpStatusHighlight(
                     localizedMessage: LocalizedString("Signal Loss", comment: "Status highlight when communications with the pod haven't happened recently."),
                     imageName: "exclamationmark.circle.fill",
@@ -1034,6 +1037,12 @@ extension OmniPumpManager {
             }
             return nil
         }
+    }
+
+    /// Signal loss is defined as not having seen a pod response in over 12 minutes.
+    private func isSignalLost(at date: Date, lastPodUpdate: Date?) -> Bool {
+        let timeSinceLastResponse = date.timeIntervalSince(lastPodUpdate ?? .distantPast)
+        return timeSinceLastResponse > .minutes(12)
     }
 
     func isRunningManualTempBasal(for state: OmniPumpManagerState) -> Bool {

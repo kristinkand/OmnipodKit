@@ -65,6 +65,8 @@ extension OmniPumpManagerState {
     /// The export: facts about the pod, none of this controller's relationship to it.
     func sharedConfiguration(managerIdentifier: String) -> SharedDeviceConfiguration {
         var shared = self
+        // only the pod in use: the previous pod's history stays on the phone
+        shared.previousPodState = nil
         shared.podConnectionReleased = false
         shared.refusesForeignSessionsSince = nil
         shared.configuredByAnotherController = false
@@ -82,6 +84,8 @@ extension OmniPumpManagerState {
     /// identities, and delivery this controller did not command is not booked.
     func adopted(handle: String?) -> OmniPumpManagerState {
         var state = self
+        // an export from before it left it out: the history is the phone's
+        state.previousPodState = nil
         var pod = podState?.sharedFacts
         pod?.bleIdentifier = handle
         pod?.untrackedDeliveryIsForeign = true

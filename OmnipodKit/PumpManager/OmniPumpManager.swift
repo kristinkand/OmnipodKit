@@ -89,6 +89,13 @@ public class OmniPumpManager: RileyLinkPumpManager {
         state.podState?.localizedFaultDescription
     }
 
+    /// Trio watch: a pod command's connect waits while this returns more than 0 (the watch's G7 link is up), at
+    /// most 15 s. See `BluetoothManager.commandConnectDelay`.
+    public static var commandConnectDelay: (() -> TimeInterval)? {
+        get { BluetoothManager.commandConnectDelay }
+        set { BluetoothManager.commandConnectDelay = newValue }
+    }
+
     public var inSignalLoss: Bool {
         isSignalLost(at: Date(), lastPodUpdate: state.podState?.podTimeUpdated)
     }

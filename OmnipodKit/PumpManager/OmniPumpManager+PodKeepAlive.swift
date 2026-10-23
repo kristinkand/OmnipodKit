@@ -77,9 +77,11 @@ extension OmniPumpManager {
         }
     }
 
-    /// Timer keep alives run in the background only for modes that keep the pod connected there.
+    /// Timer keep alives run in the background only for modes that keep the pod connected there, and never for a pod
+    /// handed over by another controller: it isn't held connected between commands, and on the watch the app's
+    /// background state never reaches here, so the timer read the pod at every wake (2026-10-23 10:30:15).
     private var podKeepAliveTimerAllowed: Bool {
-        guard state.podKeepAlive.usesTimerBasedKeepAlives else { return false }
+        guard state.podKeepAlive.usesTimerBasedKeepAlives, !state.configuredByAnotherController else { return false }
         return !(podKeepAliveAppInBackground && !state.podKeepAlive.keepsPodConnectedInBackground)
     }
 

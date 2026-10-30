@@ -1422,7 +1422,12 @@ class BluetoothManager: NSObject {
             // MUST take precedence over the low-power alarm scan (which filters on C005/C00A and would
             // never see a pairing pod) and over scanningEnabled (pairing has to scan regardless).
             let reason = discoveryModeEnabled ? "discovery/pairing" : "loan-takeover"
-            services = [serviceUUID]
+            // A filled, unpaired O5 can advertise the attention suffix (…FE02) instead of …FE00.
+            if podType.isO5 && uuidPdmId == nil {
+                services = [serviceUUID, o5FaultAdvertisementUUID(0xFFFFFFFE)]
+            } else {
+                services = [serviceUUID]
+            }
             options = [CBCentralManagerScanOptionAllowDuplicatesKey: true]
             log.default("Start scanning (%{public}@ filter=%{public}@)", reason, serviceUUID.uuidString)
             // Log which branch of `podScanServiceUUID` built the filter: a wrong one matches nothing, silently.

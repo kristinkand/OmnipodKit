@@ -379,15 +379,21 @@ class BlePodComms: PodComms {
                 log.bleDebug("@@@ Updating EAP SQN to: %d", podSqn)
                 // The delta counts sessions another controller made since our last contact.
                 let delta = podSqn - eapSeq
+                // kept for every resync: the foreign-session refusal and the hosts' checks read it
                 lastSqnResync = (at: Date(), ours: eapSeq, pods: podSqn)
-                omnipodLogDeviceEvent(String(format:
-                    "[trust] EAP SQN RESYNC — pod=%d ours=%d (Δ%+d): another controller has talked to this pod since our last contact [sqn-resync]",
-                    podSqn, eapSeq, delta))
                 podState!.bleMessageTransportState.eapSeq = podSqn
-                // Read before writing, and book none of what we do not track: any resync counts,
-                // since the delta reads 0 after a single foreign session.
-                podState!.lastDeliveryStatusReceived = nil
-                podState!.untrackedDeliveryIsForeign = true
+                // Any resync counts: after a single foreign session the pod's counter equals the one just sent.
+                let pending = podState!.unacknowledgedCommand
+                if podState!.resolveAfterSessionResync() {
+                    let dropped = pending.map { " · unconfirmed \($0) dropped, nothing booked" } ?? ""
+                    omnipodLogDeviceEvent(String(format:
+                        "[trust] EAP SQN RESYNC — pod=%d ours=%d (Δ%+d): another controller may have run this shared pod [sqn-resync]",
+                        podSqn, eapSeq, delta) + dropped)
+                } else {
+                    omnipodLogDeviceEvent(String(format:
+                        "[trust] EAP SQN RESYNC — pod=%d ours=%d (Δ%+d): pod never shared, this controller's own counter was behind [sqn-resync]",
+                        podSqn, eapSeq, delta))
+                }
             }
             return nil
         case .SessionKeys(let keys):

@@ -433,6 +433,14 @@ class BlePodComms: PodComms {
 
         let mts = try establishSession(ltk: ltk, eapSeq: podState!.incrementEapSeq())
         if mts == nil {
+            // The resync showed another controller's sessions on a pod this controller refuses to share since `since`:
+            // no second handshake. It would take the pod's next session number, and the other controller's next
+            // session would find this one's use and be refused too (a phone relaunched while a watch had the pod,
+            // 1 November 17:03: the watch's sessions were refused). The pod's count is left as the other one left it.
+            if let since = refusesForeignSessionsSince, let resync = lastSqnResync, resync.at > since, resync.pods > resync.ours {
+                omnipodLogDeviceEvent("[trust] handshake stopped after the resync: another controller has used the pod; its session count is left alone")
+                throw PodCommsError.diagnosticMessage(str: "Another controller has used this pod")
+            }
             let mts = try establishSession(ltk: ltk, eapSeq: podState!.incrementEapSeq())
             if mts == nil {
                 throw PodCommsError.diagnosticMessage(str: "Received resynchronization SQN for the second time")

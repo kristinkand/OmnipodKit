@@ -146,6 +146,10 @@ public struct PodState: RawRepresentable, Equatable, CustomDebugStringConvertibl
     /// From the last status: the undelivered part of a bolus running that no unfinalized dose tracks. Not persisted.
     var untrackedBolusRemaining: Double = 0
 
+    /// When the bolus the pod reported at its last status will end, whoever started it; nil when it reported none.
+    /// Not persistent, as the status it comes from (`PumpDeliveryOdometer.bolusUnderWayEndsAt`).
+    var bolusUnderWayEndsAt: Date?
+
 
     init(
         address: UInt32,
@@ -419,6 +423,8 @@ public struct PodState: RawRepresentable, Equatable, CustomDebugStringConvertibl
             }
         }
         untrackedBolusRemaining = deliveryStatus.bolusing && unfinalizedBolus == nil ? bolusNotDelivered : 0
+        bolusUnderWayEndsAt = deliveryStatus.bolusing && bolusNotDelivered > 0
+            ? date.addingTimeInterval(bolusNotDelivered / Pod.bolusDeliveryRate) : nil
         if deliveryStatus.tempBasalRunning && unfinalizedTempBasal == nil { // active temp basal that we aren't tracking
             // unfinalizedTempBasal = UnfinalizedDose(tempBasalRate: 0, startTime: date, duration: .minutes(30), isHighTemp: false, scheduledCertainty: .certain, insulinType: insulinType)
         }

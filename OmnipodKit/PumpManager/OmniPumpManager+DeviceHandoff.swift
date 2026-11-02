@@ -310,8 +310,16 @@ extension OmniPumpManager: PumpDeliveryOdometer {
 
     public var untrackedBolusRemaining: Double { state.podState?.untrackedBolusRemaining ?? 0 }
 
+    public var bolusUnderWayEndsAt: Date? { state.podState?.bolusUnderWayEndsAt }
+
     /// A real status read, bypassing the freshness shortcut in ensureCurrentPumpData.
-    public func refreshDeliveredUnits(completion: @escaping (Bool) -> Void) {
+    public func refreshDeliveredUnits() async -> Bool {
+        await withCheckedContinuation { continuation in
+            refreshDeliveredUnits { continuation.resume(returning: $0) }
+        }
+    }
+
+    private func refreshDeliveredUnits(completion: @escaping (Bool) -> Void) {
         #if targetEnvironment(simulator)
         // No radio in the simulator: fake the round-trip and stamp a measurement, as jumpStartPod does.
         DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 1.2) { [weak self] in

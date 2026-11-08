@@ -210,14 +210,19 @@ class BluetoothManager: NSObject {
 
     /// Drop the pod link so another controller can take it. Clears the command-connect marker first,
     /// as the idle disconnect does, so the foreground keep-alive does not reconnect.
-    /// A command already under way finishes first, bounded by `loanReleaseWaitLimit`: released in the
-    /// middle of an exchange, the pod was left answering nobody and accepted no session until it was
-    /// restarted, and whether it took the command was unknown. No new command dials meanwhile.
+    /// An exchange under way on a live link finishes first, bounded by `loanReleaseWaitLimit`: released
+    /// in the middle of an exchange, the pod was left answering nobody and accepted no session until it
+    /// was restarted, and whether it took the command was unknown. A command still waiting for its
+    /// connection has no exchange to protect: the release is at once, and cancels that connection.
+    /// No new command dials meanwhile, and nothing more is sent (`isReleasedForLoan`).
+    /// (After Jeremy Barnum's jeremybarnum/OmnipodKit b117532, sportmode/next-dev.)
     func releaseConnectionForLoan(uuidString: String) {
         managerQueue.async {
             self.commandConnectInFlight = false
             self.loanReleased = true
-            guard self.hasActiveCommandSession else {
+            let linkUp = self.devices.first(where: { $0.manager.peripheral.identifier.uuidString == uuidString })?
+                .manager.peripheral.state == .connected
+            guard self.hasActiveCommandSession, linkUp else {
                 self.disconnectFromDevice(uuidString: uuidString)
                 return
             }
@@ -247,8 +252,19 @@ class BluetoothManager: NSObject {
     /// True from a release until the pod is taken back (`connectToDevice`, or a takeover scan, which
     /// adopts without it): no command dials the pod meanwhile, including a session queued before the
     /// release (an unacknowledged command's status read dialed a lent pod during the other controller's
-    /// takeover). managerQueue-isolated.
-    private var loanReleased = false
+    /// takeover). Written on managerQueue.
+    private var loanReleased: Bool {
+        get { lockedLoanReleased.value }
+        set { lockedLoanReleased.value = newValue }
+    }
+
+    /// Lock-guarded: the transport reads it on PeripheralManager's queues, not managerQueue.
+    private let lockedLoanReleased = Locked<Bool>(false)
+
+    /// Whether the pod is released to another controller: the transport sends it nothing meanwhile.
+    var isReleasedForLoan: Bool {
+        return loanReleased
+    }
 
     /// Scan for the pod with this address and adopt the peripheral this device discovers.
     func beginLoanTakeover(podId: UInt32) {

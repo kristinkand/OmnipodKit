@@ -375,7 +375,7 @@ class BlePodComms: PodComms {
         case .SessionNegotiationResynchronization(let keys):
             log.bleDebug("@@@ Received EAP SQN resynchronization: %@", keys.synchronizedEapSqn.data.hexadecimalString)
             if podState != nil {
-                let podSqn = keys.synchronizedEapSqn.toInt()
+                let podSqn = try keys.synchronizedEapSqn.toInt()
                 log.bleDebug("@@@ Updating EAP SQN to: %d", podSqn)
                 // The delta counts sessions another controller made since our last contact.
                 let delta = podSqn - eapSeq

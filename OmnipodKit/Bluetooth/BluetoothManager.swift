@@ -1261,6 +1261,7 @@ class BluetoothManager: NSObject {
             connectionDelegate?.omnipodLogDeviceEvent("[connectOnDemand] pod released to another controller — not dialing")
             return
         }
+        let probeCancelled = delayedProbeInFlight
         if delayedProbeInFlight {
             log.default("[connectOnDemand] command preempts heartbeat probe — cancelling probe")
             connectionDelegate?.omnipodLogDeviceEvent("[connectOnDemand] command preempts heartbeat probe — cancelling probe")
@@ -1289,17 +1290,20 @@ class BluetoothManager: NSObject {
             eagerConnect(peripheral, deadline: Date().addingTimeInterval(BluetoothManager.eagerConnectBudgetSeconds))
             return
         }
-        connectForCommand(peripheral)
+        connectForCommand(peripheral, afterCancel: probeCancelled)
     }
 
     /// A known pod is connected with a plain connect(); iOS completes it on the pod's next advertisement.
-    private func connectForCommand(_ peripheral: CBPeripheral) {
+    /// `afterCancel`: the probe's pending connect was cancelled just before. The cancel is asynchronous, so the
+    /// peripheral can still read `.connecting`; the connect is asked for all the same, or the command would wait out
+    /// its whole connect timeout on a connect that no longer exists.
+    private func connectForCommand(_ peripheral: CBPeripheral, afterCancel: Bool = false) {
         dispatchPrecondition(condition: .onQueue(managerQueue))
         let target = manager.retrievePeripherals(withIdentifiers: [peripheral.identifier]).first ?? peripheral
         // One pending connect per pod. A second caller (a hand-over's dial, then its first command)
         // waits on the connect already asked for: didConnect satisfies every waiting session. Asking
         // again made the system refuse one of the two with "maximum number of connections".
-        if target.state == .connecting || peripheral.state == .connecting {
+        if !afterCancel, target.state == .connecting || peripheral.state == .connecting {
             log.default("[connectOnDemand] connect already pending for %{public}@", peripheral.identifier.uuidString)
             connectionDelegate?.omnipodLogDeviceEvent("[connectOnDemand] connect already pending")
             return

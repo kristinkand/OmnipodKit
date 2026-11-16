@@ -9,6 +9,7 @@
 
 import CoreBluetooth
 import Foundation
+import LoopKit
 import os.log
 
 class PeripheralManager: NSObject {
@@ -42,6 +43,10 @@ class PeripheralManager: NSObject {
 
     /// When an on-demand connect last timed out. Sessions queued before then don't wait on another.
     var lastConnectFailure: Date? = nil
+
+    /// The pod's signal strength on this connection, read right after it came up; nil until the read answers.
+    /// Reported with the next disconnect, as a link dropped within a second shows whether the signal was weak.
+    let lastRSSI = Locked<Int?>(nil)
 
     var needsReconnection: Bool {
         guard let start = idleStart else { return false }
@@ -159,7 +164,13 @@ extension PeripheralManager {
                     // for this session (no forceful reconnect — that heuristic is what caused the ~28s
                     // disconnect-then-wait stalls). If already connected (burst of sessions), no-op.
                     if self.peripheral.state != .connected {
-                        if let enqueuedAt, let failedAt = self.lastConnectFailure, failedAt > enqueuedAt {
+                        if self.bluetoothManager?.isReleasedForLoan == true {
+                            // Released to another controller: no command dials the pod, so waiting out the connect
+                            // timeout only keeps this manager busy. On a watch (15 November, 19:56 to 20:09) a
+                            // released manager's queued sessions waited 20 s each for 13 minutes, and a start made
+                            // meanwhile with a new manager never dialed the pod.
+                            self.logDeviceEvent("[connectOnDemand] pod released to another controller — session fails at once")
+                        } else if let enqueuedAt, let failedAt = self.lastConnectFailure, failedAt > enqueuedAt {
                             // A connect already timed out while this session was waiting its turn
                             self.log.default("[connectOnDemand] queued behind a failed connect — not waiting on another")
                             self.bluetoothManager?.connectionDelegate?.omnipodLogDeviceEvent("[connectOnDemand] queued behind a failed connect — failing fast")
@@ -701,6 +712,7 @@ extension PeripheralManager: CBPeripheralDelegate {
             return
         }
         self.log.default("didReadRSSI: %{public}@", String(describing: RSSI))
+        lastRSSI.value = RSSI.intValue
     }
 
     func peripheralIsReady(toSendWriteWithoutResponse peripheral: CBPeripheral) {
@@ -738,6 +750,7 @@ extension PeripheralManager {
         self.log.debug("PeripheralManager - didConnect: %@", peripheral)
         switch peripheral.state {
         case .connected:
+            lastRSSI.value = nil
             setTraceConnected(true)
             clearCommsQueues()
 

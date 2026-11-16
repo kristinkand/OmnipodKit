@@ -790,6 +790,8 @@ class BlePodComms: PodComms {
 
         guard let manager = manager else {
             log.default("[connectOnDemand] no PeripheralManager for pod yet (not discovered) — podNotConnected")
+            // in the device log too: a watch's takeover logged no connect at all for 2 minutes (15 November, 20:09)
+            omnipodLogDeviceEvent("[connectOnDemand] no PeripheralManager for the pod yet — not connected")
             block(.failure(PodCommsError.podNotConnected))
             return
         }

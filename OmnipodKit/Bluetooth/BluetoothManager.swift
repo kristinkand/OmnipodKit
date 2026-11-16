@@ -268,6 +268,8 @@ class BluetoothManager: NSObject {
 
     /// Scan for the pod with this address and adopt the peripheral this device discovers.
     func beginLoanTakeover(podId: UInt32) {
+        // lifted at once as well: a session queued right after reads it from its own queue (PeripheralManager)
+        loanReleased = false
         managerQueue.async {
             self.loanReleased = false
             // a release still waiting for a command is void once the pod is taken back
@@ -861,6 +863,8 @@ class BluetoothManager: NSObject {
     /// Arm a scan-adopt for a pod a pending connect has not reached; either controller may call it.
     /// The central is kept, not rebuilt: it owns the restore identifier a background relaunch needs.
     func escalateLoanReclaim(podId: UInt32) {
+        // lifted at once as well: a session queued right after reads it from its own queue (PeripheralManager)
+        loanReleased = false
         managerQueue.async {
             self.log.default("take escalation — arming scan-adopt for pod 0x%x (central preserved)", podId)
             self.loanReleased = false
@@ -951,6 +955,8 @@ class BluetoothManager: NSObject {
     }
     
     func connectToDevice(uuidString: String) {
+        // lifted at once as well: a session queued right after reads it from its own queue (PeripheralManager)
+        loanReleased = false
         managerQueue.async {
             self.loanReleased = false
             // Taken back before a waiting release landed: the release is void.
@@ -1977,7 +1983,10 @@ extension BluetoothManager: CBCentralManagerDelegate {
 
         // Proxy disconnection events to peripheral manager
         for device in devices where device.manager.peripheral.identifier == peripheral.identifier {
-            device.manager.logDeviceEvent("[disconnect] \(cause), \(device.manager.linkContext)")
+            // whether the app was in front and the pod's signal: a link the pod dropped within a second of each connect
+            // in the background, and not with Trio open, was seen on a watch (13 and 15 November)
+            let signal = device.manager.lastRSSI.value.map { "\($0) dBm" } ?? "not read"
+            device.manager.logDeviceEvent("[disconnect] \(cause), \(device.manager.linkContext), app \(isAppForeground ? "in front" : "in background"), signal \(signal)")
             device.manager.centralManager(central, didDisconnect: peripheral, error: error)
         }
 

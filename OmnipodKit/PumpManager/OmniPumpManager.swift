@@ -202,6 +202,8 @@ public class OmniPumpManager: RileyLinkPumpManager {
             return nil
         }
         self.init(rawState: rawState)
+        // the adopted handle is on trial until this manager's link comes up
+        connectClock?.beginAttempt(adoptedHandle: state.podState?.bleIdentifier)
     }
 
     // Internal (was private) for +DeviceHandoff, which drives the BLE layer's release and take.

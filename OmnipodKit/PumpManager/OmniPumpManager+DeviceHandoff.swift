@@ -36,9 +36,7 @@ extension OmniPumpManager: DeviceConfigurationSharing {
             return nil
         }
         let handle = shared.podState.flatMap { OmniPumpManagerState.handle(in: localState, forPodAddress: $0.address) }
-        let adopted = shared.adopted(handle: handle)
-        ConnectClock.beginAttempt(adoptedHandle: handle)
-        return adopted.rawValue
+        return shared.adopted(handle: handle).rawValue
     }
 
     /// This controller's handle for its pod, from the manager's state.
@@ -185,7 +183,7 @@ extension OmniPumpManager: ExclusiveDeviceControl {
 
         // A saved handle that never connected is wrong: drop it from the pod state, so
         // `localState` goes nil and the next adopt searches.
-        if let unproven = ConnectClock.adoptedHandleThatNeverConnected() {
+        if let unproven = connectClock?.adoptedHandleThatNeverConnected() {
             podComms.forgetHandle()
             omnipodLogDeviceEvent("saved handle \(unproven) never connected — forgotten; the next adopt searches")
         }
@@ -204,7 +202,7 @@ extension OmniPumpManager: ExclusiveDeviceControl {
 
     /// Lifts the release (see PodState.resolveAfterForeignControl).
     private func resumeControl() {
-        ConnectClock.beginAttempt(adoptedHandle: nil)
+        connectClock?.beginAttempt(adoptedHandle: nil)
         (podComms as? BlePodComms)?.resolveAfterForeignControl(dropInFlight: state.inFlightDosesInheritedAway)
         setState { state in
             state.podConnectionReleased = false
@@ -239,9 +237,12 @@ extension OmniPumpManager: ExclusiveDeviceControl {
         (podComms as? BlePodComms)?.endEscalation()
     }
 
+    /// The BLE layer's connect clock; nil for a pod without one (Eros).
+    var connectClock: ConnectClock? { (podComms as? BlePodComms)?.bluetoothManager?.connectClock }
+
     public func connectionDiagnostics() -> String? {
         guard let ble = (podComms as? BlePodComms)?.bluetoothManager else { return nil }
-        return "\(ble.loanBleDiagnostics) pod=\(peripheralStateDescription) · \(ConnectClock.summary(since: ConnectClock.attemptStartedAt))"
+        return "\(ble.loanBleDiagnostics) pod=\(peripheralStateDescription) · \(ble.connectClock.summary(since: ble.connectClock.attemptStartedAt))"
     }
 
     /// The last EAP SQN resync: another controller established sessions since our last contact.
@@ -343,24 +344,25 @@ extension OmniPumpManager: PumpDeliveryOdometer {
 // MARK: - Connect clock
 
 /// CoreBluetooth's connect and disconnect edges, stamped as they happen, so a host polling on a
-/// deferred timer can tell "connected late" from "looked late". Observation only.
-enum ConnectClock {
-    private static let lock = NSLock()
-    private static var _lastConnectAt: Date?
-    private static var _lastDisconnectAt: Date?
-    private static var _connectCount = 0
-    private static var _lastReason: String?
-    private static var _reasons: [String] = []
+/// deferred timer can tell "connected late" from "looked late". Observation only. One per
+/// `BluetoothManager`, so an adopt, release and re-adopt never reads another manager's attempt.
+final class ConnectClock {
+    private let lock = NSLock()
+    private var _lastConnectAt: Date?
+    private var _lastDisconnectAt: Date?
+    private var _connectCount = 0
+    private var _lastReason: String?
+    private var _reasons: [String] = []
     /// Kept apart from `_lastReason`: a retry storm floods failures and would evict the one
     /// reason an established link died for.
-    private static var _lastDisconnectReason: String?
-    private static var _attemptStartedAt: Date?
-    private static var _adoptedHandle: String?
+    private var _lastDisconnectReason: String?
+    private var _attemptStartedAt: Date?
+    private var _adoptedHandle: String?
 
     /// When the current take began: at adopt, or at a take after a release.
-    static var attemptStartedAt: Date? { lock.lock(); defer { lock.unlock() }; return _attemptStartedAt }
+    var attemptStartedAt: Date? { lock.lock(); defer { lock.unlock() }; return _attemptStartedAt }
 
-    static func beginAttempt(adoptedHandle: String?) {
+    func beginAttempt(adoptedHandle: String?) {
         lock.lock()
         _lastConnectAt = nil; _lastDisconnectAt = nil; _connectCount = 0
         _lastReason = nil; _reasons = []; _lastDisconnectReason = nil
@@ -371,7 +373,7 @@ enum ConnectClock {
 
     /// The handle this attempt's adopt attached from `localState`, if it never connected. Once per
     /// attempt; the caller drops it.
-    static func adoptedHandleThatNeverConnected() -> String? {
+    func adoptedHandleThatNeverConnected() -> String? {
         lock.lock()
         let adopted = _adoptedHandle, connected = _connectCount > 0
         _adoptedHandle = nil
@@ -381,13 +383,13 @@ enum ConnectClock {
     }
 
     /// CoreBluetooth's reason a link ended; nil means this process cancelled it.
-    private static func describe(_ error: Error?) -> String {
+    private func describe(_ error: Error?) -> String {
         guard let error = error else { return "reason=nil(local-cancel?)" }
         let ns = error as NSError
         return "reason=\(ns.domain)#\(ns.code)"
     }
 
-    static func noteConnect(appState: String) {
+    func noteConnect(appState: String) {
         lock.lock()
         _lastConnectAt = Date(); _connectCount += 1
         _reasons.append("+\(_connectCount)@\(appState)")
@@ -395,7 +397,7 @@ enum ConnectClock {
         lock.unlock()
     }
 
-    static func noteDisconnect(error: Error?, appState: String) {
+    func noteDisconnect(error: Error?, appState: String) {
         let d = describe(error)
         lock.lock()
         _lastDisconnectAt = Date(); _lastDisconnectReason = d
@@ -404,7 +406,7 @@ enum ConnectClock {
         lock.unlock()
     }
 
-    static func noteFailToConnect(error: Error?, appState: String) {
+    func noteFailToConnect(error: Error?, appState: String) {
         let d = describe(error)
         lock.lock()
         _lastReason = d
@@ -415,7 +417,7 @@ enum ConnectClock {
 
     /// One field for a log line, relative to the attempt's start: the flap trail with each edge's
     /// reason and the app state it fired in.
-    static func summary(since start: Date?) -> String {
+    func summary(since start: Date?) -> String {
         lock.lock()
         let c = _lastConnectAt, d = _lastDisconnectAt, n = _connectCount
         let r = _lastReason, trail = _reasons, dr = _lastDisconnectReason

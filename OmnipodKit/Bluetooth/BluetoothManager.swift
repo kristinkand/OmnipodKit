@@ -120,6 +120,9 @@ class BluetoothManager: NSObject {
 
     weak var connectionDelegate: OmniConnectionDelegate?
 
+    /// This manager's connect and disconnect edges (`ConnectClock`).
+    let connectClock = ConnectClock()
+
     private let podType: PodType
 
     private let log = OSLog(category: "BluetoothManager")
@@ -1855,7 +1858,7 @@ extension BluetoothManager: CBCentralManagerDelegate {
 
     func centralManager(_ central: CBCentralManager, didConnect peripheral: CBPeripheral) {
         // Feeds ConnectClock, with noteDisconnect and noteFailToConnect.
-        ConnectClock.noteConnect(appState: isAppForeground ? "fg" : "bg")
+        connectClock.noteConnect(appState: isAppForeground ? "fg" : "bg")
         dispatchPrecondition(condition: .onQueue(managerQueue))
 
         // The adoption is only real once the link is up. Until this point the marker stayed
@@ -1967,7 +1970,7 @@ extension BluetoothManager: CBCentralManagerDelegate {
     }
 
     private func handleDisconnect(_ central: CBCentralManager, peripheral: CBPeripheral, error: Error?, isReconnecting: Bool) {
-        ConnectClock.noteDisconnect(error: error, appState: isAppForeground ? "fg" : "bg")
+        connectClock.noteDisconnect(error: error, appState: isAppForeground ? "fg" : "bg")
         dispatchPrecondition(condition: .onQueue(managerQueue))
 
         log.default("[#%{public}@] DISCONNECTED: %{public}@ error=%{public}@ willReconnect=%{public}@ systemReconnecting=%{public}@", instanceID, peripheral,
@@ -2079,7 +2082,7 @@ extension BluetoothManager: CBCentralManagerDelegate {
 
         log.error("[#%{public}@] FAILED TO CONNECT: %{public}@ error=%{public}@", instanceID, peripheral, String(describing: error))
 
-        ConnectClock.noteFailToConnect(error: error, appState: isAppForeground ? "fg" : "bg")
+        connectClock.noteFailToConnect(error: error, appState: isAppForeground ? "fg" : "bg")
         lastConnectFailure = (id: peripheral.identifier.uuidString,
                               code: (error as NSError?).map { "\($0.domain)#\($0.code)" } ?? "no-error",
                               at: Date())

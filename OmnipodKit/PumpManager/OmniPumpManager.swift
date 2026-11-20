@@ -2744,6 +2744,21 @@ extension OmniPumpManager: PumpManager {
         statusObservers.removeElement(observer)
     }
 
+    /// Trio's watch mode: a status read once the pod's data is older than `age`, below the 6 minutes
+    /// `ensureCurrentPumpData` waits for. A background wake that sends the pod nothing else reads it this way, so
+    /// the next wake never needs a read on top of a temp basal: on the watch, a wake's pod messages past its first
+    /// few seconds count toward a watchOS limit that cuts all the app's Bluetooth links near 200.
+    public func readStatusIfOlder(than age: TimeInterval, completion: @escaping (Date?) -> Void) {
+        guard state.hasActivePod, -(state.lastPumpDataReportDate ?? .distantPast).timeIntervalSinceNow > age else {
+            completion(lastSync)
+            return
+        }
+        log.default("Fetching status ahead of the next wake: pumpData older than %{public}@", age.timeIntervalStr)
+        getPodStatus(canOptimize: true) { _ in
+            completion(self.lastSync)
+        }
+    }
+
     public func ensureCurrentPumpData(completion: ((Date?) -> Void)?) {
         #if targetEnvironment(simulator)
         // No radio in the simulator, so a status fetch would always fail: stamp a fresh measurement

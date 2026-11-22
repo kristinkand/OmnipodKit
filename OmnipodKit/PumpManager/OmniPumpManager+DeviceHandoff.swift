@@ -430,3 +430,30 @@ final class ConnectClock {
         return "cb: didConnect \(rel(c)) (n=\(n)) · didDisconnect \(rel(d))\(dwhy)\(why)\(tr)"
     }
 }
+
+/// The last EAP session counter the pod accepted from this controller, kept per pod on this device apart from
+/// the pod state, and saved the moment the pod accepts it. The pod state with its own copy of the counter is
+/// saved only when the host saves it, so after the app ends in between the saved copy is behind the pod's.
+/// After Jeremy Barnum's AcceptedEapSqn (loopandlearn/OmnipodKit#177, 57fe873). Never part of the pod state
+/// the host saves or exports: it is this controller's own record. One pod at a time: a new pod replaces it.
+struct AcceptedEapSqn {
+    private static let key = "OmnipodKit.acceptedEapSqn"
+    private let defaults: UserDefaults
+
+    init(defaults: UserDefaults = .standard) {
+        self.defaults = defaults
+    }
+
+    private static func podKey(_ pod: PodState) -> String {
+        "\(pod.address)-\(pod.lotNo)-\(pod.lotSeq)"
+    }
+
+    func value(for pod: PodState) -> Int? {
+        guard let saved = defaults.dictionary(forKey: Self.key), saved["pod"] as? String == Self.podKey(pod) else { return nil }
+        return saved["sqn"] as? Int
+    }
+
+    func record(_ sqn: Int, for pod: PodState) {
+        defaults.set(["pod": Self.podKey(pod), "sqn": sqn], forKey: Self.key)
+    }
+}

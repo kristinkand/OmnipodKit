@@ -71,6 +71,8 @@ class BlePodComms: PodComms {
     /// A session that finds another controller's use after this date is refused, so this one never
     /// commands a pod the other may be dosing with. Stored per communications instance.
     var refusesForeignSessionsSince: Date?
+    /// The last session counter the pod accepted from this controller, saved as soon as it does (see AcceptedEapSqn).
+    private let acceptedEapSqn = AcceptedEapSqn()
 
     /// Go looking for the pod by address instead of waiting to hear it (a stalled take).
     func escalateTakeover(podId: UInt32) {
@@ -386,6 +388,17 @@ class BlePodComms: PodComms {
                 log.bleDebug("@@@ Updating EAP SQN to: %d", podSqn)
                 // The delta counts sessions another controller made since our last contact.
                 let delta = podSqn - eapSeq
+                // Jeremy Barnum (loopandlearn/OmnipodKit#177, 57fe873): the pod's counter no higher than the last one
+                // it accepted from this controller is this controller's own, saved late (the app ended before its host
+                // saved the pod state, as watchOS often ends the watch app); another controller's session always
+                // moves it higher. Not another controller then: no refusal, the unconfirmed command stays ours.
+                if let accepted = acceptedEapSqn.value(for: podState!), podSqn <= accepted {
+                    podState!.bleMessageTransportState.eapSeq = podSqn
+                    omnipodLogDeviceEvent(String(format:
+                        "[trust] EAP SQN RESYNC — pod=%d ours=%d (Δ%+d): this controller's own counter, saved late (last accepted %d) [sqn-resync-own]",
+                        podSqn, eapSeq, delta, accepted))
+                    return nil
+                }
                 // kept for every resync: the foreign-session refusal and the hosts' checks read it
                 lastSqnResync = (at: Date(), ours: eapSeq, pods: podSqn)
                 podState!.bleMessageTransportState.eapSeq = podSqn
@@ -423,6 +436,7 @@ class BlePodComms: PodComms {
             if podState != nil {
                 log.bleDebug("@@@ Setting podState transport state to %{public}@", transportState.inlineDescription)
                 podState!.bleMessageTransportState = transportState
+                acceptedEapSqn.record(eapSeq, for: podState!)
             } else {
                 log.bleDebug("@@@ Used keys %{public}@ to create transport state %{public}@", String(describing: keys), transportState.inlineDescription)
             }

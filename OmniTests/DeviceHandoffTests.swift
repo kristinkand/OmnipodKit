@@ -363,4 +363,23 @@ final class DeviceHandoffTests: XCTestCase {
                        reservoirLevel: Pod.reservoirLevelAboveThresholdMagicNumber, insulinDelivered: 13,
                        bolusNotDelivered: bolusNotDelivered, lastProgrammingMessageSeqNum: 5, alerts: AlertSet(slots: []))
     }
+
+    /// The accepted counter is kept per pod on this device, read back as after a relaunch; another pod's entry
+    /// is not read, and a new pod replaces it.
+    func testTheAcceptedCounterIsKeptForOnePodOnly() throws {
+        let suite = "DeviceHandoffTests.acceptedEapSqn"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let pod = makePodState()
+        let other = try XCTUnwrap(PodState(rawValue: pod.rawValue.merging(["lotSeq": UInt32(560314)]) { $1 }))
+
+        XCTAssertNil(AcceptedEapSqn(defaults: defaults).value(for: pod))
+        AcceptedEapSqn(defaults: defaults).record(60, for: pod)
+        XCTAssertEqual(AcceptedEapSqn(defaults: defaults).value(for: pod), 60)
+        XCTAssertNil(AcceptedEapSqn(defaults: defaults).value(for: other))
+
+        AcceptedEapSqn(defaults: defaults).record(5, for: other)
+        XCTAssertNil(AcceptedEapSqn(defaults: defaults).value(for: pod), "a new pod replaces the entry")
+        XCTAssertNil(pod.rawValue["acceptedEapSqn"], "never part of the pod state the host saves or exports")
+    }
 }

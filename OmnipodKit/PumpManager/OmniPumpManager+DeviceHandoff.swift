@@ -434,7 +434,7 @@ final class ConnectClock {
 /// The last EAP session counter the pod accepted from this controller, kept per pod on this device apart from
 /// the pod state, and saved the moment the pod accepts it. The pod state with its own copy of the counter is
 /// saved only when the host saves it, so after the app ends in between the saved copy is behind the pod's.
-/// After Jeremy Barnum's AcceptedEapSqn (loopandlearn/OmnipodKit#177, 57fe873). Never part of the pod state
+/// After AcceptedEapSqn by Jeremy Barnum and dnzxy (loopandlearn/OmnipodKit#177, 57fe873). Never part of the pod state
 /// the host saves or exports: it is this controller's own record. One pod at a time: a new pod replaces it.
 struct AcceptedEapSqn {
     private static let key = "OmnipodKit.acceptedEapSqn"

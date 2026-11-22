@@ -444,7 +444,7 @@ struct AcceptedEapSqn {
         self.defaults = defaults
     }
 
-    private static func podKey(_ pod: PodState) -> String {
+    static func podKey(_ pod: PodState) -> String {
         "\(pod.address)-\(pod.lotNo)-\(pod.lotSeq)"
     }
 

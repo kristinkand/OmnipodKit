@@ -2761,6 +2761,28 @@ extension OmniPumpManager: PumpManager {
         }
     }
 
+    /// Trio's watch mode: the session counter the pod last accepted from this device, with the pod it belongs to,
+    /// for the partner device to accept (`acceptPartnerSessionCounter`). A watch meeting a new pod logs in once, and
+    /// the iPhone's next login found the pod's counter ahead of its own and took the watch for another controller:
+    /// its start failed (22 November).
+    public var sessionCounterForPartner: String? {
+        guard let pod = state.podState, let sqn = AcceptedEapSqn().value(for: pod) else { return nil }
+        return "\(AcceptedEapSqn.podKey(pod)):\(sqn)"
+    }
+
+    /// The partner device's counter for this pod (`sessionCounterForPartner`): a resync to it or below is taken as
+    /// the partner's own session, not another controller's. Ignored for another pod, or when this device's own
+    /// counter is already as far.
+    public func acceptPartnerSessionCounter(_ token: String) {
+        guard let pod = state.podState, let colon = token.lastIndex(of: ":"),
+              token[..<colon] == AcceptedEapSqn.podKey(pod), let sqn = Int(token[token.index(after: colon)...])
+        else { return }
+        let accepted = AcceptedEapSqn()
+        guard sqn > (accepted.value(for: pod) ?? -1) else { return }
+        accepted.record(sqn, for: pod)
+        log.default("The partner's session counter %{public}@ accepted for this pod", String(sqn))
+    }
+
     public func ensureCurrentPumpData(completion: ((Date?) -> Void)?) {
         #if targetEnvironment(simulator)
         // No radio in the simulator, so a status fetch would always fail: stamp a fresh measurement

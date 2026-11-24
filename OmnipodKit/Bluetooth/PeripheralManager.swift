@@ -733,4 +733,17 @@ extension PeripheralManager {
             self.bluetoothManager?.disconnectOnDemand(self.peripheral, by: "idle")
         }
     }
+
+    /// The idle disconnect without its delay, for a host that knows no session follows. Only after a session
+    /// ended on this link (`idleStart` set), so a link still logging in is kept.
+    func disconnectIfIdle() {
+        queue.async { [weak self] in
+            guard let self, BluetoothManager.connectOnDemandEnabled,
+                  self.bluetoothManager?.shouldHoldConnection != true,
+                  self.idleStart != nil, self.sessionQueue.operationCount == 0,
+                  self.peripheral.state == .connected, !self.isRetiredForLoan else { return }
+            self.log.default("[connectOnDemand] released by the host, no queued session -> disconnecting")
+            self.bluetoothManager?.disconnectOnDemand(self.peripheral, reason: "released")
+        }
+    }
 }

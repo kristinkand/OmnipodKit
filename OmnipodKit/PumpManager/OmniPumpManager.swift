@@ -790,6 +790,16 @@ extension OmniPumpManager {
         return .deactivating // Can't be reached and thus will never be returned
     }
 
+    /// Trio's watch mode: whether the pod is done and wants replacing: faulted (its alarm, empty, occluded, past
+    /// 80 h), out of insulin, or past its 72 h expiry. dnzxy's idea: the watch offers Deactivate only then.
+    public var podNeedsReplacing: Bool {
+        guard let podState = state.podState else { return false }
+        if podState.fault != nil { return true }
+        if let percent = state.reservoirLevel?.percentage, percent == 0 { return true }
+        if let expiresAt = podState.expiresAt, expiresAt <= Date() { return true }
+        return false
+    }
+
     var podCommState: PodCommState {
         return podCommState(for: state)
     }

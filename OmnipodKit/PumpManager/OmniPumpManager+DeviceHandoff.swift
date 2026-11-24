@@ -189,6 +189,19 @@ extension OmniPumpManager: ExclusiveDeviceControl {
         }
     }
 
+    /// Dials the pod before the host's next session, so connect and login overlap its other work. Not while
+    /// released; a link already up or dialing is left alone.
+    public func preconnect() {
+        guard !state.podConnectionReleased, hasActivePod else { return }
+        (podComms as? BlePodComms)?.preconnect()
+    }
+
+    /// Drops the link now instead of after the idle delay, for a host that sends nothing more. A queued or
+    /// running session, or a held connection (foreground), keeps it.
+    public func releaseLink() {
+        (podComms as? BlePodComms)?.releaseIdleLink()
+    }
+
     /// Takes the pod back after a release, or starts the search an adopted manager needs.
     public func takeControl() {
         if state.podConnectionReleased {

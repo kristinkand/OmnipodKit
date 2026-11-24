@@ -134,6 +134,22 @@ class BlePodComms: PodComms {
         }
     }
 
+    /// Dials the pod ahead of a session, so connect and login overlap the host's own work. The post-connect
+    /// session's idle disconnect drops the link if no session follows.
+    func preconnect() {
+        guard BluetoothManager.connectOnDemandEnabled, let bleIdentifier = podState?.bleIdentifier,
+              let pm = bluetoothManager.peripheralManager(forIdentifier: bleIdentifier),
+              pm.peripheral.state == .disconnected
+        else { return }
+        bluetoothManager.connectOnDemand(pm.peripheral)
+    }
+
+    /// Drops the link now instead of after the idle delay; a queued or running session keeps it.
+    func releaseIdleLink() {
+        guard let bleIdentifier = podState?.bleIdentifier else { return }
+        bluetoothManager.peripheralManager(forIdentifier: bleIdentifier)?.disconnectIfIdle()
+    }
+
     override func forgetPod() {
         bluetoothManager.setUuidPdmId(nil)
         if let manager = manager {

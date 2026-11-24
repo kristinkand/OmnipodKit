@@ -202,6 +202,15 @@ extension OmniPumpManager: ExclusiveDeviceControl {
         (podComms as? BlePodComms)?.releaseIdleLink()
     }
 
+    /// For a host whose partner (Trio's watch) hasn't met this pod yet: while `letGo`, the link isn't held open
+    /// between commands, not even in the foreground, and an idle link drops at once. A connected pod doesn't
+    /// advertise, so the partner's search can't find it. Off again: the hold as for this pod before.
+    public func setLetsPartnerMeetPod(_ letGo: Bool) {
+        guard let blePodComms = podComms as? BlePodComms else { return }
+        blePodComms.setHoldsConnectionBetweenCommands(!letGo && !state.configuredByAnotherController)
+        if letGo { blePodComms.releaseIdleLink() }
+    }
+
     /// Takes the pod back after a release, or starts the search an adopted manager needs.
     public func takeControl() {
         if state.podConnectionReleased {

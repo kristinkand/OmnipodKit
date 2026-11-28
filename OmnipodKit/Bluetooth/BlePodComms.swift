@@ -68,6 +68,22 @@ class BlePodComms: PodComms {
     /// The most recent EAP SQN resync: the pod's session counter found ahead of ours, so another
     /// controller established sessions since our last contact. nil until the first this process.
     private(set) var lastSqnResync: (at: Date, ours: Int, pods: Int)?
+
+    /// The partner device's counter arrived after this device's resync found it on the pod: that resync was the
+    /// partner's session, not another controller's (third tester, 27 November: the watch met a new pod 6 s before
+    /// the iPhone's next login, and the iPhone refused every command until a loop asked the watch).
+    /// Off the caller's thread: a session in progress holds the lock for its whole exchange.
+    func forgetResync(upTo sqn: Int) {
+        DispatchQueue.global(qos: .userInitiated).async {
+            self.podStateLock.lock()
+            defer { self.podStateLock.unlock() }
+            if let resync = self.lastSqnResync, resync.pods <= sqn {
+                self.lastSqnResync = nil
+                self.omnipodLogDeviceEvent("[trust] the resync to \(resync.pods) was the partner's session (its counter \(sqn))")
+            }
+        }
+    }
+
     /// A session that finds another controller's use after this date is refused, so this one never
     /// commands a pod the other may be dosing with. Stored per communications instance.
     var refusesForeignSessionsSince: Date?

@@ -2781,12 +2781,13 @@ extension OmniPumpManager: PumpManager {
     }
 
     /// The partner device's counter for this pod (`sessionCounterForPartner`): a resync to it or below is taken as
-    /// the partner's own session, not another controller's. Ignored for another pod, or when this device's own
-    /// counter is already as far.
+    /// the partner's own session, not another controller's, also one this device already met. Ignored for another
+    /// pod; not recorded when this device's own counter is already as far.
     public func acceptPartnerSessionCounter(_ token: String) {
         guard let pod = state.podState, let colon = token.lastIndex(of: ":"),
               token[..<colon] == AcceptedEapSqn.podKey(pod), let sqn = Int(token[token.index(after: colon)...])
         else { return }
+        (podComms as? BlePodComms)?.forgetResync(upTo: sqn)
         let accepted = AcceptedEapSqn()
         guard sqn > (accepted.value(for: pod) ?? -1) else { return }
         accepted.record(sqn, for: pod)
